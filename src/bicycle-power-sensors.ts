@@ -8,6 +8,9 @@ import { AntPlusSensor, AntPlusScanner, Messages } from './ant';
 class BicyclePowerSensorState {
 	constructor(deviceID: number) {
 		this.DeviceID = deviceID;
+		this.lastCrankCount = -1
+		this.lastAccumTorque = -1;
+		this.lastCrankPeriod = -1;
 	}
 
 	DeviceID: number;
@@ -25,6 +28,10 @@ class BicyclePowerSensorState {
 	CalculatedCadence?: number;
 	CalculatedTorque?: number;
 	CalculatedPower?: number;
+
+	lastCrankCount:number;
+	lastAccumTorque:number;
+	lastCrankPeriod:number;
 }
 
 class BicyclePowerScanState extends BicyclePowerSensorState {
@@ -71,12 +78,20 @@ export class BicyclePowerScanner extends AntPlusScanner {
 	}
 }
 
+function fixRollover(val:number, fixWith:number):number {
+	if(val < 0) {
+		val += fixWith;
+	}
+	return val;
+}
 function updateState(
 	sensor: BicyclePowerSensor | BicyclePowerScanner,
 	state: BicyclePowerSensorState | BicyclePowerScanState,
 	data: Buffer) {
 
+	
 	const page = data.readUInt8(Messages.BUFFER_INDEX_MSG_DATA);
+	console.log("Got page ", page, " for device ", state.DeviceID);
 	switch (page) {
 		case 0x01: {
 			const calID = data.readUInt8(Messages.BUFFER_INDEX_MSG_DATA + 1);
@@ -113,6 +128,45 @@ function updateState(
 			}
 			state.AccumulatedPower = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA + 4);
 			state.Power = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA + 6);
+			break;
+		}
+		case 0x11: {
+			// wheel-torque
+			break;
+		}
+		case 0x12: {
+			// crank-torque
+			const updateCount = data.readUInt8(Messages.BUFFER_INDEX_MSG_DATA + 1);
+			const crankCount = data.readUInt8(Messages.BUFFER_INDEX_MSG_DATA + 2);
+			const instCadence = data.readUInt8(Messages.BUFFER_INDEX_MSG_DATA + 3);
+			const crankPeriod = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA + 4);
+			const accumTorque = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA + 6);
+			
+			state.Cadence = instCadence; // as a backup, use the instantaneous cadence
+
+			const lastCrankCount = state.lastCrankCount;
+			if(crankCount !== lastCrankCount) {
+				let deltaCranks = fixRollover(crankCount - lastCrankCount, 256);
+				let deltaTorque = fixRollover(accumTorque - state.lastAccumTorque, 65536);
+				let deltaPeriod = fixRollover(crankPeriod - state.lastCrankPeriod, 65536);
+
+				if(state.lastAccumTorque >= 0 && state.lastCrankPeriod >= 0 && state.lastCrankCount >= 0) {
+					const angularVel = 2*Math.PI*deltaCranks / (deltaPeriod / 2048);
+					const torque = deltaTorque - (32*deltaCranks);
+					const power = angularVel * torque;
+					const cadence = 60 * (deltaCranks) / (deltaPeriod / 2048);
+	
+					state.Power = power;
+					state.Cadence = cadence;
+				}
+				
+
+			} else {
+				// they sent us an event, but the crank hasn't rotated yet.  this is a weird asynchronous-rotating crank, we're going to ignore it.
+			}
+			state.lastAccumTorque = accumTorque;
+			state.lastCrankPeriod = crankPeriod;
+			state.lastCrankCount = crankCount;
 			break;
 		}
 		case 0x20: {
