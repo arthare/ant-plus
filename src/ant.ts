@@ -367,6 +367,7 @@ export class USBDriver extends events.EventEmitter {
 		this.inEp = this.iface.endpoints[0] as usb.InEndpoint;
 
 		this.inEp.on('data', (data: Buffer) => {
+			console.log("data arrived at usb ", data);
 			if (!data.length) {
 				return;
 			}
@@ -648,6 +649,7 @@ export abstract class BaseSensor extends events.EventEmitter {
 				case Constants.MESSAGE_CHANNEL_UNASSIGN:
 					this.statusCbk = undefined;
 					this.channel = undefined;
+					console.log("channel unassigned");
 					process.nextTick(() => this.emit('detached'));
 					return true;
 				case Constants.MESSAGE_CHANNEL_ACKNOWLEDGED_DATA:
@@ -667,7 +669,11 @@ export abstract class BaseSensor extends events.EventEmitter {
 
 			process.nextTick(() => this.emit('attached'));
 		} else if (this.stick.attach(this, true)) {
+			if(typeof channel !== 'number') {
+				throw "channel must be a number";
+			}
 			this.channel = channel;
+			console.log("channel set to ", this.channel);
 			this.deviceID = 0;
 			this.transmissionType = 0;
 
@@ -686,6 +692,9 @@ export abstract class BaseSensor extends events.EventEmitter {
 		}
 		if (!this.stick.attach(this, false)) {
 			throw 'cannot attach';
+		}
+		if(typeof channel !== 'number') {
+			throw "Channel must be a number";
 		}
 		this.channel = channel;
 		this.deviceID = deviceID;
@@ -740,6 +749,7 @@ export abstract class BaseSensor extends events.EventEmitter {
 					return true;
 				case Constants.MESSAGE_CHANNEL_UNASSIGN:
 					this.statusCbk = undefined;
+					console.log("unassigning channel");
 					this.channel = undefined;
 					process.nextTick(() => this.emit('detached'));
 					return true;

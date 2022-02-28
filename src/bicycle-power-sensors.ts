@@ -143,7 +143,6 @@ function updateState(
 			const accumTorque = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA + 6);
 			
 			state.Cadence = instCadence; // as a backup, use the instantaneous cadence
-
 			const lastCrankCount = state.lastCrankCount;
 			if(crankCount !== lastCrankCount) {
 				let deltaCranks = fixRollover(crankCount - lastCrankCount, 256);
@@ -158,9 +157,9 @@ function updateState(
 	
 					state.Power = power;
 					state.Cadence = cadence;
+				} else {
+					state.Power = 0; // we're just starting up, so just say we have power zero for now
 				}
-				
-
 			} else {
 				// they sent us an event, but the crank hasn't rotated yet.  this is a weird asynchronous-rotating crank, we're going to ignore it.
 			}
