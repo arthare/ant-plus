@@ -498,15 +498,18 @@ export class USBDriver extends events.EventEmitter {
 
 	public attach(sensor: BaseSensor, forScan: boolean): boolean {
 		if (this.usedChannels < 0) {
+			console.log(`stick cannot attach to ${sensor.deviceID} because usedChannels < 0.  used channels = ${this.usedChannels}`);
 			return false;
 		}
 		if (forScan) {
 			if (this.usedChannels !== 0) {
+				console.log(`stick cannot attach to ${sensor.deviceID} for scan because usedChannels != 0.  used channels = ${this.usedChannels}`);
 				return false;
 			}
 			this.usedChannels = -1;
 		} else {
 			if (this.maxChannels <= this.usedChannels) {
+				console.log(`stick cannot attach to ${sensor.deviceID} for scan because maxChannels <= usedChannels.  used channels = ${this.usedChannels}, max channels = ${this.maxChannels}`);
 				return false;
 			}
 			++this.usedChannels;
@@ -681,20 +684,20 @@ export abstract class BaseSensor extends events.EventEmitter {
 
 			this.write(Messages.assignChannel(channel, type));
 		} else {
-			throw 'cannot attach';
+			throw new Error('cannot attach');
 		}
 	}
 
 	protected attach(channel: number, type: string, deviceID: number, deviceType: number, transmissionType: number,
 		timeout: number, period: number, frequency: number) {
 		if (this.channel !== undefined) {
-			throw 'already attached';
+			throw new Error('already attached');
 		}
 		if (!this.stick.attach(this, false)) {
-			throw 'cannot attach';
+			throw new Error('cannot attach');
 		}
 		if(typeof channel !== 'number') {
-			throw "Channel must be a number";
+			throw new Error("Channel must be a number");
 		}
 		this.channel = channel;
 		this.deviceID = deviceID;
@@ -750,6 +753,7 @@ export abstract class BaseSensor extends events.EventEmitter {
 				case Constants.MESSAGE_CHANNEL_UNASSIGN:
 					this.statusCbk = undefined;
 					console.log("unassigning channel");
+					this.stick.detach(this);
 					this.channel = undefined;
 					process.nextTick(() => this.emit('detached'));
 					return true;
