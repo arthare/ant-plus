@@ -788,6 +788,7 @@ export abstract class BaseSensor extends events.EventEmitter {
 		const messageID = data.readUInt8(Messages.BUFFER_INDEX_MSG_TYPE);
 		const channel = data.readUInt8(Messages.BUFFER_INDEX_CHANNEL_NUM);
 
+		this.emit('rawData', data);
 		if (channel === this.channel) {
 			if (messageID === Constants.MESSAGE_CHANNEL_EVENT) {
 				const status = {
