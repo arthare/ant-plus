@@ -5,7 +5,7 @@
 
 import { AntPlusSensor, AntPlusScanner, Messages } from './ant';
 
-class BicyclePowerSensorState {
+export class BicyclePowerSensorState {
 	constructor(deviceID: number) {
 		this.DeviceID = deviceID;
 		this.lastCrankCount = -1
@@ -49,7 +49,7 @@ export class BicyclePowerSensor extends AntPlusSensor {
 
 	private state: BicyclePowerSensorState;
 
-	protected updateState(deviceId, data) {
+	public updateState(deviceId, data) {
 		this.state.DeviceID = deviceId;
 		updateState(this, this.state, data);
 	}
@@ -73,7 +73,7 @@ export class BicyclePowerScanner extends AntPlusScanner {
 		this.states[deviceId].Threshold = threshold;
 	}
 
-	protected updateState(deviceId, data) {
+	public updateState(deviceId, data) {
 		updateState(this, this.states[deviceId], data);
 	}
 }
@@ -84,7 +84,7 @@ function fixRollover(val:number, fixWith:number):number {
 	}
 	return val;
 }
-function updateState(
+export function updateState(
 	sensor: BicyclePowerSensor | BicyclePowerScanner,
 	state: BicyclePowerSensorState | BicyclePowerScanState,
 	data: Buffer) {
@@ -92,6 +92,7 @@ function updateState(
 	
 	const page = data.readUInt8(Messages.BUFFER_INDEX_MSG_DATA);
 	console.log("Got page ", page, " for device ", state.DeviceID);
+	
 	switch (page) {
 		case 0x01: {
 			const calID = data.readUInt8(Messages.BUFFER_INDEX_MSG_DATA + 1);
@@ -142,8 +143,9 @@ function updateState(
 			const crankPeriod = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA + 4);
 			const accumTorque = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA + 6);
 			
+			console.log("crank-torque cranks ", crankCount, " cadence ", instCadence);
 			state.Cadence = instCadence; // as a backup, use the instantaneous cadence
-			const lastCrankCount = state.lastCrankCount;
+			const lastCrankCount = state.lastCrankCount || 0;
 			if(crankCount !== lastCrankCount) {
 				let deltaCranks = fixRollover(crankCount - lastCrankCount, 256);
 				let deltaTorque = fixRollover(accumTorque - state.lastAccumTorque, 65536);
@@ -151,7 +153,7 @@ function updateState(
 
 				if(state.lastAccumTorque >= 0 && state.lastCrankPeriod >= 0 && state.lastCrankCount >= 0) {
 					const angularVel = 2*Math.PI*deltaCranks / (deltaPeriod / 2048);
-					const torque = deltaTorque - (32*deltaCranks);
+					const torque = deltaTorque / (32*deltaCranks);
 					const power = angularVel * torque;
 					const cadence = 60 * (deltaCranks) / (deltaPeriod / 2048);
 	
