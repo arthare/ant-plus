@@ -91,8 +91,8 @@ export function updateState(
 
 	
 	const page = data.readUInt8(Messages.BUFFER_INDEX_MSG_DATA);
-	console.log("Got page ", page, " for device ", state.DeviceID);
-	
+	let hadNewPower = false;
+
 	switch (page) {
 		case 0x01: {
 			const calID = data.readUInt8(Messages.BUFFER_INDEX_MSG_DATA + 1);
@@ -129,6 +129,7 @@ export function updateState(
 			}
 			state.AccumulatedPower = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA + 4);
 			state.Power = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA + 6);
+			hadNewPower = true;
 			break;
 		}
 		case 0x11: {
@@ -142,15 +143,14 @@ export function updateState(
 			const instCadence = data.readUInt8(Messages.BUFFER_INDEX_MSG_DATA + 3);
 			const crankPeriod = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA + 4);
 			const accumTorque = data.readUInt16LE(Messages.BUFFER_INDEX_MSG_DATA + 6);
-			
-			console.log("crank-torque cranks ", crankCount, " cadence ", instCadence);
+
 			state.Cadence = instCadence; // as a backup, use the instantaneous cadence
 			const lastCrankCount = state.lastCrankCount || 0;
 			if(crankCount !== lastCrankCount) {
+				
 				let deltaCranks = fixRollover(crankCount - lastCrankCount, 256);
 				let deltaTorque = fixRollover(accumTorque - state.lastAccumTorque, 65536);
 				let deltaPeriod = fixRollover(crankPeriod - state.lastCrankPeriod, 65536);
-
 				if(state.lastAccumTorque >= 0 && state.lastCrankPeriod >= 0 && state.lastCrankCount >= 0) {
 					const angularVel = 2*Math.PI*deltaCranks / (deltaPeriod / 2048);
 					const torque = deltaTorque / (32*deltaCranks);
@@ -162,6 +162,7 @@ export function updateState(
 				} else {
 					state.Power = 0; // we're just starting up, so just say we have power zero for now
 				}
+				hadNewPower = true;
 			} else {
 				// they sent us an event, but the crank hasn't rotated yet.  this is a weird asynchronous-rotating crank, we're going to ignore it.
 			}
@@ -209,11 +210,15 @@ export function updateState(
 				state.CalculatedTorque = torque;
 
 				state.CalculatedPower = torque * cadence * Math.PI / 30; // Watts
+				hadNewPower = true;
 			}
 			break;
 		}
 		default:
 			return;
 	}
-	sensor.emit('powerData', state);
+
+	if(hadNewPower) {
+		sensor.emit('powerData', state);
+	}
 }
